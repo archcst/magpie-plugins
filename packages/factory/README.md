@@ -141,6 +141,9 @@ Factory's byte limit: compact the conversation or start a new one.
 
 ## Use
 
+For Pi 1.5 prompt support and optional generic tool-name mapping, see
+[Pi compatibility](./PI-COMPAT.md).
+
 ```sh
 magpie plugin add @magpie-community/opencode-factory-auth
 magpie plugin login factory

@@ -526,6 +526,9 @@ const DROID_LINE = "You are Droid, an AI software engineering agent built by Fac
 // developer prompt, changes; the rest of pi's prompt goes on as it is.
 const PI_OPENING = /(^|\n)You are an expert coding assistant operating inside pi, a coding agent harness\./
 const PI_COMPAT = "You are an expert coding assistant."
+// Pi 1.5 uses this shorter opening. Keep the task instructions after it.
+const PI_OPENING_V15 = /(^|\n)You are a coding assistant running inside pi, a coding agent harness\./
+const PI_COMPAT_V15 = "You are a coding assistant."
 // omp (@oh-my-pi/pi-coding-agent 18.22.0) opens its system prompt with its
 // own sentence, which Factory refuses on Messages and chat completions alike
 // (400 content_policy_rejected, replayed 2026-11-17): the sentence alone is
@@ -537,7 +540,9 @@ const OMP_OPENING = /(^|\n)You are omp's trusted coding assistant\./
 const OMP_COMPAT = "You are a trusted coding assistant."
 function clientOpening(text) {
   if (typeof text !== "string") return text
-  return text.replace(PI_OPENING, (_, at) => at + PI_COMPAT).replace(OMP_OPENING, (_, at) => at + OMP_COMPAT)
+  return text.replace(PI_OPENING, (_, at) => at + PI_COMPAT)
+    .replace(PI_OPENING_V15, (_, at) => at + PI_COMPAT_V15)
+    .replace(OMP_OPENING, (_, at) => at + OMP_COMPAT)
 }
 
 // pi turns a compaction, and a branch it came back from, into a user
@@ -578,6 +583,7 @@ function piSummary(text) {
 const FALLBACK_PHRASES = {
   anywhere: [
     "You are an expert coding assistant operating inside pi, a coding agent harness.",
+    "You are a coding assistant running inside pi, a coding agent harness.",
     PI_SUMMARIES[0][0].split("\n\n")[0],
     "You are omp's trusted coding assistant",
   ],
@@ -590,7 +596,7 @@ const FALLBACK_PHRASES = {
     "This session is being continued from a previous conversation that ran out of context.",
     "(user's private global instructions for all projects)",
   ],
-  toolNames: ["read", "bash", "edit", "write", "Bash", "Write", "get_weather"],
+  toolNames: ["read", "bash", "edit", "write", "Bash", "Write", "get_weather", "Agent"],
 }
 function loadClientPhrases() {
   try {
@@ -1817,6 +1823,9 @@ function anthropicBody(body) {
 }
 
 export const FactoryAuthPlugin = async ({ client, magpie }) => {
+  const genericToolNames = () => {
+    try { return magpie?.option?.(PROVIDER, "generic_tool_names") === true } catch { return false }
+  }
   // standardOnly is the user's STANDARD_ONLY as magpie has it now, read at
   // each usage reading so a change needs no restart; false outside magpie
   const standardOnly = () => {
@@ -2085,6 +2094,11 @@ export const FactoryAuthPlugin = async ({ client, magpie }) => {
       // reading
       options: [
         {
+          key: "generic_tool_names",
+          label: "Generic tool names",
+          description: "Sends function tools under stable generated names and restores their original names in replies. Tool descriptions, arguments and permissions stay unchanged.",
+        },
+        {
           key: MODEL_ORDER,
           label: "Group models by company",
           description: "Groups models by maker: Anthropic, OpenAI, Google, then others. Newer versions come first within each family, with Fast Mode beside its base model. Off preserves the default order and first 24 models. Refresh the model list after changing this option.",
@@ -2179,7 +2193,7 @@ export const FactoryAuthPlugin = async ({ client, magpie }) => {
           // Factory refuses some tool names (client-phrases.json): they go
           // out aliased and come back as they were
           const dialect = anthropic ? "anthropic" : dialectOf(path)
-          const named = aliasToolNames(dialect, anthropic ? anthropicBody(body) : droidBody(path, body), REFUSED_TOOL_NAMES)
+          const named = aliasToolNames(dialect, anthropic ? anthropicBody(body) : droidBody(path, body), REFUSED_TOOL_NAMES, genericToolNames())
           const adapted = anthropic ? wrapAnthropicTools(named.body) : { body: named.body, names: new Set() }
           const out = sanitizeBody(adapted.body)
           // the caller's length is of the body it sent, not of this one

@@ -49,7 +49,7 @@ function bytes(text, size) {
 const stream = (text, size = 1) => new Response(bytes(text, size), { headers: { "content-type": "text/event-stream" } })
 const frames = (text) => text.split(/\n\n/).filter(Boolean).map((f) => JSON.parse(f.split("\n").find((l) => l.startsWith("data:")).slice(5)))
 
-const NAMES = ["read", "bash", "edit", "write", "Bash", "Write", "get_weather"]
+const NAMES = ["read", "bash", "edit", "write", "Bash", "Write", "get_weather", "Agent"]
 
 test("the refused names are the ones in client-phrases.json", async () => {
   const file = await Bun.file(new URL("./client-phrases.json", import.meta.url)).json()
@@ -74,7 +74,7 @@ test("Messages: refused tools, tool_choice and earlier calls are renamed; a take
   }
   for (const url of [messages, API + "/api/llm/a/v1/messages/count_tokens"]) {
     const b = await sent(url, request)
-    expect(b.tools.map((t) => t.name)).toEqual(["read_tool_2", "bash_tool", "edit_tool", "write_tool", "Bash_tool", "Write_tool", "get_weather_tool", "read_tool", "grep"])
+    expect(b.tools.map((t) => t.name)).toEqual(["read_tool_2", "bash_tool", "edit_tool", "write_tool", "Bash_tool", "Write_tool", "get_weather_tool", "Agent_tool", "read_tool", "grep"])
     // the rest of a tool is as it was
     expect(b.tools[1]).toEqual({ ...request.tools[1], name: "bash_tool" })
     expect(b.tool_choice).toEqual({ type: "tool", name: "bash_tool" })
@@ -84,6 +84,28 @@ test("Messages: refused tools, tool_choice and earlier calls are renamed; a take
     expect(b.messages[2]).toEqual(request.messages[2])
     expect(request.tools[0].name).toBe("read")
   }
+})
+
+test("Messages: Agent name round-trips in a streamed tool call", async () => {
+  const text = sse([
+    ["content_block_start", { type: "content_block_start", index: 0, content_block: { type: "tool_use", id: "agent1", name: "Agent_tool", input: {} } }],
+    ["content_block_delta", { type: "content_block_delta", index: 0, delta: { type: "input_json_delta", partial_json: '{"prompt":"Read the fixture"}' } }],
+    ["content_block_stop", { type: "content_block_stop", index: 0 }],
+    ["message_stop", { type: "message_stop" }],
+  ])
+  const { post, seen } = await loaded(() => stream(text, 1))
+  const res = await post(messages, {
+    model: "claude-opus-5-5", max_tokens: 100, stream: true,
+    tools: [anthropicTool("Agent")],
+    tool_choice: { type: "tool", name: "Agent" },
+    messages: [{ role: "user", content: "Read the fixture" }],
+  })
+  const sent = JSON.parse(seen.at(-1).body)
+  expect(sent.tools[0].name).toBe("Agent_tool")
+  expect(sent.tool_choice.name).toBe("Agent_tool")
+  const out = frames(await res.text())
+  expect(out[0].content_block.name).toBe("Agent")
+  expect(out[1].delta.partial_json).toBe('{"prompt":"Read the fixture"}')
 })
 
 test("Messages: a request declaring no refused name goes out byte for byte", async () => {

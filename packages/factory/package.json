@@ -5,7 +5,7 @@
   "type": "module",
   "main": "./opencode.mjs",
   "exports": { ".": "./opencode2.mjs" },
-  "files": ["index.mjs", "opencode.mjs", "opencode2.mjs", "anthropic-tools.mjs", "client-phrases.json", "README.md"],
+  "files": ["index.mjs", "opencode.mjs", "opencode2.mjs", "anthropic-tools.mjs", "client-phrases.json", "README.md", "PI-COMPAT.md"],
   "keywords": ["opencode", "opencode-plugin", "magpie", "factory", "droid"],
   "license": "MIT",
   "repository": { "type": "git", "url": "git+https://github.com/magpie-community/plugins.git", "directory": "packages/factory" }

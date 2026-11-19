@@ -1,6 +1,8 @@
 // Factory rejects composition keywords at the tool schema's root. Keep the
 // original schema under one argument, and hide that wire-only envelope from
 // the caller in both replies and the next turn's history.
+import { createHash } from "node:crypto"
+
 const argument = "arguments"
 const compositions = ["anyOf", "oneOf", "allOf"]
 const schemaMaps = ["properties", "patternProperties", "$defs", "definitions", "dependentSchemas"]
@@ -88,7 +90,8 @@ export function wrapAnthropicTools(body) {
 // instead (then _tool_2, _tool_3 while that name is taken), in every field of
 // the request that carries tool names, and its calls in a reply get the
 // original name back. The aliases are chosen from the request alone, in the
-// order its tools are declared.
+// order its tools are declared. Generic mode assigns every function tool
+// a stable hash-based name without changing descriptions or arguments.
 const alias = "_tool"
 const list = (v) => Array.isArray(v) ? v : []
 
@@ -144,7 +147,7 @@ const nameSlots = {
 // `refused` (a Set) declared under its alias, and the aliases as a Map from
 // alias to original name. A request with nothing to alias comes back as it
 // is, the same body.
-export function aliasToolNames(dialect, body, refused) {
+export function aliasToolNames(dialect, body, refused, generic = false) {
   const none = { body, aliases: new Map() }
   const slots = nameSlots[dialect]
   const text = slots && bodyString(body)
@@ -157,9 +160,10 @@ export function aliasToolNames(dialect, body, refused) {
   const renamed = new Map()
   for (const [o, k] of declared) {
     const name = o[k]
-    if (!refused.has(name) || renamed.has(name)) continue
-    let next = name + alias, n = 1
-    while (taken.has(next) || refused.has(next)) next = `${name}${alias}_${++n}`
+    if (typeof name !== "string" || !name || (!generic && !refused.has(name)) || renamed.has(name)) continue
+    const base = generic ? "operation_" + createHash("sha256").update(name).digest("hex").slice(0, 16) : name + alias
+    let next = base, n = 1
+    while (taken.has(next) || refused.has(next)) next = `${base}_${++n}`
     taken.add(next)
     renamed.set(name, next)
   }
